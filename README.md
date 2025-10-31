@@ -1,4 +1,4 @@
-A - n8n Automation
+Email Automation- n8n Automation
 
 An intelligent AI-powered email automation system built with n8n.
 This workflow automatically detects new content or updates from any connected website or database, matches them with relevant users based on interests or preferences, and sends personalized email notifications using semantic AI.
