@@ -1,0 +1,551 @@
+{
+  "name": "Academic Matchmaker - PRODUCTION (Scalable)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -3712,
+        -96
+      ],
+      "id": "755edf68-152d-477b-b80f-4500f22377e7",
+      "name": "Every 5 Minutes"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "getAll",
+        "projectId": "academic-matchmaker-prod",
+        "collection": "artifacts/academic-match-production/public/data/posts"
+      },
+      "type": "n8n-nodes-base.googleFirebaseCloudFirestore",
+      "typeVersion": 1,
+      "position": [
+        -3504,
+        -96
+      ],
+      "id": "3822c5ee-2b8d-437e-a8e3-b594d39f5c6a",
+      "name": "Fetch Posts",
+      "credentials": {
+        "googleApi": {
+          "id": "h9F6sAtITkRNgGBj",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{Object.keys($json).length}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -3280,
+        -96
+      ],
+      "id": "c53333ae-7299-4499-aec8-739a5c6f1cfc",
+      "name": "Posts Exist?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allPosts = $input.all();\nconsole.log('\\n=== POSTS ===');\nconsole.log('Total:', allPosts.length);\n\nconst processedPosts = [];\nfor (const item of allPosts) {\n  const post = item.json;\n  const title = post.title || post.authorTitle || post.projTitle || post.name || 'Untitled';\n  const content = post.content || post.description || post.projDescription || post.body || '';\n  const fullText = title + ' ' + content;\n  \n  processedPosts.push({\n    json: {\n      postId: post.id || post._id || 'unknown',\n      title: title,\n      content: content,\n      fullText: fullText\n    }\n  });\n}\n\nreturn processedPosts;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3056,
+        -96
+      ],
+      "id": "255a6914-d070-4856-8b6e-74573d27ecf2",
+      "name": "Process Posts"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2832,
+        -96
+      ],
+      "id": "da2d5970-1704-43fa-8565-9072558e8b03",
+      "name": "Loop Each Post"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.jina.ai/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer jina_5c5c126ff94f48c0b0e2d42ad833c5d1RxYjTUBXEFdc-KeXDSbeCAMsbCvx"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"jina-embeddings-v3\", \"task\": \"retrieval.passage\", \"dimensions\": 1024, \"input\": [$json.fullText] } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2624,
+        -96
+      ],
+      "id": "cd6596fc-f0f1-4e4b-b94d-860b7c0f21a7",
+      "name": "Embed Post"
+    },
+    {
+      "parameters": {
+        "url": "https://firestore.googleapis.com/v1/projects/academic-matchmaker-prod/databases/(default)/documents/artifacts/academic-match-production/public/data/students",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pageSize",
+              "value": "1000"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyBXdC23TpcXdS2FCrwejDHkmbcQafmBq50"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2400,
+        -96
+      ],
+      "id": "d7774a08-d8d2-47ee-9fdc-02b8a7c1cd6c",
+      "name": "Fetch All Students (HTTP)",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Firestore response - GENERAL for any number of students\nconst response = $input.first().json;\n\nconsole.log('\\n=== PARSING STUDENTS ===');\n\nif (!response.documents || response.documents.length === 0) {\n  console.log('❌ No students in database');\n  return [];\n}\n\nconsole.log('Raw documents:', response.documents.length);\n\nconst students = [];\n\nfor (const doc of response.documents) {\n  const fields = doc.fields || {};\n  const student = { _id: doc.name.split('/').pop() };\n  \n  // Convert Firestore format to normal JSON\n  for (const [key, value] of Object.entries(fields)) {\n    if (value.stringValue !== undefined) {\n      student[key] = value.stringValue;\n    } else if (value.integerValue !== undefined) {\n      student[key] = parseInt(value.integerValue);\n    } else if (value.doubleValue !== undefined) {\n      student[key] = value.doubleValue;\n    } else if (value.booleanValue !== undefined) {\n      student[key] = value.booleanValue;\n    } else if (value.arrayValue && value.arrayValue.values) {\n      student[key] = value.arrayValue.values.map(v => {\n        if (v.stringValue) return v.stringValue;\n        if (v.integerValue) return parseInt(v.integerValue);\n        if (v.doubleValue) return v.doubleValue;\n        return v;\n      });\n    } else if (value.mapValue && value.mapValue.fields) {\n      const mapObj = {};\n      for (const [mk, mv] of Object.entries(value.mapValue.fields)) {\n        if (mv.stringValue) mapObj[mk] = mv.stringValue;\n        else if (mv.integerValue) mapObj[mk] = parseInt(mv.integerValue);\n        else if (mv.doubleValue) mapObj[mk] = mv.doubleValue;\n      }\n      student[key] = mapObj;\n    }\n  }\n  \n  students.push({ json: student });\n}\n\nconsole.log('✅ Parsed:', students.length, 'students');\nreturn students;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2176,
+        -96
+      ],
+      "id": "9411bc5a-093e-4fb3-91d4-90d82962ff93",
+      "name": "Parse Students"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add post data and build interests for EACH student\nconst postData = $('Embed Post').first().json;\nconst postEmbedding = postData.data[0].embedding;\nconst postTitle = $('Loop Each Post').first().json.title;\nconst postContent = $('Loop Each Post').first().json.content;\nconst postId = $('Loop Each Post').first().json.postId;\n\nconst students = $input.all();\n\nconsole.log('\\n=== ENRICHING STUDENTS ===');\nconsole.log('Students:', students.length);\nconsole.log('Post:', postTitle);\n\nconst enrichedStudents = [];\n\nfor (const student of students) {\n  const data = student.json;\n  \n  // Build comprehensive interest text\n  const parts = [];\n  \n  // Helper to add field if exists\n  const addField = (field) => {\n    if (data[field]) {\n      if (Array.isArray(data[field])) {\n        const filtered = data[field].filter(x => x && String(x).trim());\n        if (filtered.length > 0) parts.push(filtered.join(' '));\n      } else if (String(data[field]).trim()) {\n        parts.push(String(data[field]));\n      }\n    }\n  };\n  \n  // Add all relevant fields\n  addField('keywords');\n  addField('researchArea');\n  addField('interests');\n  addField('projDescription');\n  addField('projTitle');\n  addField('skills');\n  addField('bio');\n  addField('title');\n  addField('expDescription');\n  addField('achDescription');\n  addField('department');\n  addField('degree');\n  \n  const interestText = parts.join(' ');\n  \n  // Only include if has email and interests\n  if (data.email && interestText.length > 10) {\n    enrichedStudents.push({\n      json: {\n        email: data.email,\n        name: data.name || data.email.split('@')[0],\n        interests: interestText,\n        postTitle: postTitle,\n        postContent: postContent,\n        postId: postId,\n        postEmbedding: postEmbedding\n      }\n    });\n  }\n}\n\nconsole.log('Valid students:', enrichedStudents.length);\n\nif (enrichedStudents.length === 0) {\n  return [{ json: { noStudents: true } }];\n}\n\nreturn enrichedStudents;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        -96
+      ],
+      "id": "01391460-611b-4ede-879d-9fcce5d56e59",
+      "name": "Enrich with Post Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Batch all interests for efficient embedding\nconst students = $input.all();\n\nconsole.log('\\n=== BATCHING FOR EMBEDDING ===');\nconsole.log('Students to batch:', students.length);\n\nif (students.length === 0 || students[0].json.noStudents) {\n  return [{ json: { noStudents: true } }];\n}\n\nconst allInterests = [];\nconst studentMetadata = [];\n\nfor (const student of students) {\n  allInterests.push(student.json.interests);\n  studentMetadata.push(student.json);\n}\n\nconsole.log('Interests in batch:', allInterests.length);\n\nreturn [{\n  json: {\n    interests: allInterests,\n    students: studentMetadata\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        -96
+      ],
+      "id": "6021e4be-df1d-47d4-9e99-00a9c2d49b7b",
+      "name": "Batch All Interests"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.jina.ai/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer jina_5c5c126ff94f48c0b0e2d42ad833c5d1RxYjTUBXEFdc-KeXDSbeCAMsbCvx"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"jina-embeddings-v3\", \"task\": \"retrieval.query\", \"dimensions\": 1024, \"input\": $json.interests } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1520,
+        -96
+      ],
+      "id": "90e2de27-d6dd-46ce-823a-7d48ba23074f",
+      "name": "Batch Embed All Students"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split batch back to individual student items\nconst response = $input.first().json;\nconst embeddings = response.data;\nconst batchData = $('Batch All Interests').first().json;\nconst students = batchData.students;\n\nconsole.log('\\n=== SPLITTING EMBEDDINGS ===');\nconsole.log('Embeddings received:', embeddings.length);\nconsole.log('Students to split:', students.length);\n\nif (embeddings.length !== students.length) {\n  console.log('⚠️ COUNT MISMATCH!');\n  console.log('Using minimum:', Math.min(embeddings.length, students.length));\n}\n\nconst results = [];\nconst count = Math.min(students.length, embeddings.length);\n\nfor (let i = 0; i < count; i++) {\n  results.push({\n    json: {\n      ...students[i],\n      studentEmbedding: embeddings[i].embedding\n    }\n  });\n}\n\nconsole.log('✅ Created', results.length, 'individual items');\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -96
+      ],
+      "id": "4c91da09-e3d4-4b33-8ba6-a0d0770159aa",
+      "name": "Split to Individuals"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Semantic matching with cosine similarity\nfunction cosineSimilarity(a, b) {\n  if (!a || !b || a.length !== b.length) return 0;\n  let dot = 0, normA = 0, normB = 0;\n  for (let i = 0; i < a.length; i++) {\n    dot += a[i] * b[i];\n    normA += a[i] * a[i];\n    normB += b[i] * b[i];\n  }\n  return dot / (Math.sqrt(normA) * Math.sqrt(normB));\n}\n\nconsole.log('\\n=== SEMANTIC MATCHING ===');\n\nconst THRESHOLD = 0.25; // 25% as requested\nconst students = $input.all();\nconst matched = [];\nconst allScores = [];\n\nconsole.log('Evaluating:', students.length, 'students');\nconsole.log('Threshold:', (THRESHOLD * 100) + '%\\n');\n\nfor (const item of students) {\n  const s = item.json;\n  \n  if (!s.studentEmbedding || !s.postEmbedding) {\n    console.log('⚠️ Missing embedding for:', s.email);\n    continue;\n  }\n  \n  const similarity = cosineSimilarity(s.postEmbedding, s.studentEmbedding);\n  const percent = Math.round(similarity * 100);\n  \n  allScores.push({ email: s.email, percent: percent });\n  \n  const status = percent >= (THRESHOLD * 100) ? '✅ MATCH' : '❌';\n  console.log(`${s.name} (${s.email})`);\n  console.log(`  ${percent}% ${status}`);\n  \n  if (similarity >= THRESHOLD) {\n    matched.push({\n      json: {\n        email: s.email,\n        name: s.name,\n        postTitle: s.postTitle,\n        postContent: s.postContent,\n        similarity: percent + '%'\n      }\n    });\n  }\n}\n\nconsole.log('\\n=== SUMMARY ===');\nconsole.log('Total evaluated:', allScores.length);\nconsole.log('Matches found:', matched.length);\n\nif (allScores.length > 0) {\n  const avg = Math.round(allScores.reduce((sum, s) => sum + s.percent, 0) / allScores.length);\n  const max = Math.max(...allScores.map(s => s.percent));\n  const min = Math.min(...allScores.map(s => s.percent));\n  console.log(`Range: ${min}%-${max}% (avg: ${avg}%)`);\n}\n\nif (matched.length === 0) {\n  console.log('\\n💡 No matches above 25% threshold');\n  return [{ json: { noMatches: true, scores: allScores } }];\n}\n\nreturn matched;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        -96
+      ],
+      "id": "653ead6a-ebfa-4c13-a5e8-908efc369fc7",
+      "name": "Semantic Match (25%)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.noMatches !== true}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        -96
+      ],
+      "id": "d2fbb9f8-147a-4e8b-85dc-61c4b6cf2c2d",
+      "name": "Has Matches?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json;\nconst firstName = s.name.split(' ')[0] || s.name;\n\n// Create email with HTML for proper formatting\nconst htmlBody = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;\">\n  \n  <p style=\"font-size: 16px; line-height: 1.6; margin-bottom: 20px;\">\n    Hi <strong>${firstName}</strong>,\n  </p>\n  \n  <p style=\"font-size: 16px; line-height: 1.6; margin-bottom: 30px;\">\n    We found an exciting opportunity that aligns perfectly with your interests and background!\n  </p>\n  \n  <hr style=\"border: none; border-top: 2px solid #667eea; margin: 30px 0;\">\n  \n  <h2 style=\"color: #667eea; font-size: 20px; margin-bottom: 15px;\">\n    📌 OPPORTUNITY DETAILS\n  </h2>\n  \n  <p style=\"margin-bottom: 10px;\">\n    <strong style=\"color: #555;\">Title:</strong><br>\n    <span style=\"font-size: 18px; color: #2d3748;\">${s.postTitle}</span>\n  </p>\n  \n  <p style=\"margin-bottom: 10px;\">\n    <strong style=\"color: #555;\">Description:</strong><br>\n    <span style=\"font-size: 15px; line-height: 1.6; color: #4a5568;\">${s.postContent}</span>\n  </p>\n  \n  <p style=\"background-color: #f0f4ff; padding: 12px; border-radius: 8px; display: inline-block; margin-top: 15px;\">\n    <strong style=\"color: #667eea;\">🎯 Match Score: ${s.similarity}</strong>\n  </p>\n  \n  <hr style=\"border: none; border-top: 2px solid #667eea; margin: 30px 0;\">\n  \n  <h2 style=\"color: #667eea; font-size: 18px; margin-bottom: 15px;\">\n    💡 WHY THIS MATCHES YOU\n  </h2>\n  \n  <p style=\"font-size: 15px; line-height: 1.6; color: #4a5568; margin-bottom: 30px;\">\n    This opportunity aligns with your research interests and academic profile. Based on our intelligent matching system, we believe this could be a great fit for your career goals.\n  </p>\n  \n  <h2 style=\"color: #667eea; font-size: 18px; margin-bottom: 15px;\">\n    🚀 NEXT STEPS\n  </h2>\n  \n  <ol style=\"font-size: 15px; line-height: 2; color: #4a5568; padding-left: 20px;\">\n    <li>Review the full details on our Reserach Link platform</li>\n    <li>Connect with the opportunity provider directly</li>\n    <li>Submit your application if you're interested</li>\n  </ol>\n  \n  <hr style=\"border: none; border-top: 1px solid #e2e8f0; margin: 40px 0 30px 0;\">\n  \n  <p style=\"font-size: 15px; color: #4a5568; margin-bottom: 10px;\">\n    <strong>Best regards,</strong><br>\n    Research Link Team\n  </p>\n  \n  <p style=\"font-size: 13px; color: #718096; line-height: 1.6; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px;\">\n    <em>Need help? Reply to this email or visit our support center.</em><br>\n    This is an automated notification based on your interests and profile.\n  </p>\n  \n</div>\n`;\n\nconsole.log('📧 Formatted email generated for:', s.email);\n\nreturn [{\n  json: {\n    email: s.email,\n    subject: `🎓 New Opportunity: ${s.postTitle}`,\n    body: htmlBody\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -176
+      ],
+      "id": "e3e62c9e-8ef9-4179-bce2-d8be6333d2e6",
+      "name": "Generate Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -416,
+        -176
+      ],
+      "id": "9952a2a2-2ec6-428c-a7e0-b74c418f2929",
+      "name": "Send Email",
+      "webhookId": "4a92f2c8-0b66-4eec-9dbd-1ac7435975c5",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "alZCwZBurLh4VCxS",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconsole.log('\\n✅ EMAIL SENT');\nconsole.log('To:', r.to);\nconsole.log('ID:', r.id);\nreturn [$input.first()];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -176
+      ],
+      "id": "a0c467b9-fe86-483f-ae9d-d9db8f8d0919",
+      "name": "Log Success"
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('\\n❌ NO MATCHES above 25% threshold');\nreturn [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        32
+      ],
+      "id": "9558e897-835f-40e2-8ff8-38cf3194cdea",
+      "name": "Log No Match"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -3056,
+        112
+      ],
+      "id": "74360c21-76df-42a0-9e14-8f68dd349350",
+      "name": "No Posts"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Posts": {
+      "main": [
+        [
+          {
+            "node": "Posts Exist?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Posts Exist?": {
+      "main": [
+        [
+          {
+            "node": "Process Posts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Posts": {
+      "main": [
+        [
+          {
+            "node": "Loop Each Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Each Post": {
+      "main": [
+        [
+          {
+            "node": "Embed Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Each Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Post": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Students (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Students (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Parse Students",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Students": {
+      "main": [
+        [
+          {
+            "node": "Enrich with Post Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich with Post Data": {
+      "main": [
+        [
+          {
+            "node": "Batch All Interests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch All Interests": {
+      "main": [
+        [
+          {
+            "node": "Batch Embed All Students",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Embed All Students": {
+      "main": [
+        [
+          {
+            "node": "Split to Individuals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split to Individuals": {
+      "main": [
+        [
+          {
+            "node": "Semantic Match (25%)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Semantic Match (25%)": {
+      "main": [
+        [
+          {
+            "node": "Has Matches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Matches?": {
+      "main": [
+        [
+          {
+            "node": "Generate Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log No Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "aa721396-3095-4c8e-bd43-f1cb32c13e04",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dc70e7b883728c427589159378341ac16217773fbb21e3ca27d57f49668226ca"
+  },
+  "id": "UnRceVPBL8bUKQdh",
+  "tags": []
+}
