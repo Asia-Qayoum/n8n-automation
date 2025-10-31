@@ -1,85 +1,105 @@
-# Academic Matchmaker - n8n Automation
+A - n8n Automation
 
-An intelligent academic opportunity matching system powered by n8n workflow automation. This system automatically matches research opportunities and academic posts with relevant users based on their interests and profiles using advanced AI embeddings and semantic similarity.
+An intelligent AI-powered email automation system built with n8n.
+This workflow automatically detects new content or updates from any connected website or database, matches them with relevant users based on interests or preferences, and sends personalized email notifications using semantic AI.
 
-## 🎯 Overview
+🎯 Overview
 
-The Academic Matchmaker workflow automatically processes new academic opportunities and intelligently matches them with users who have relevant interests. It uses AI-powered embeddings to understand content and user profiles, then sends personalized email notifications to matched users.
+The AI Email Automation Workflow streamlines communication by automatically sending personalized emails whenever new opportunities, posts, or updates are added to a website.
+It connects directly to your database, uses AI embeddings for semantic understanding, and ensures that each user receives only relevant notifications.
 
-## ✨ Features
+✨ Features
 
-- **Automated Scheduling**: Runs every 5 minutes to check for new opportunities
-- **AI-Powered Matching**: Uses Jina AI embeddings for semantic understanding
-- **Smart Filtering**: Only matches users above a 25% similarity threshold
-- **Personalized Emails**: Sends beautifully formatted HTML emails with opportunity details
-- **Batch Processing**: Efficiently handles large volumes of users and posts
-- **Scalable Architecture**: Built to handle production workloads
+Automated Scheduling – Runs at configurable intervals to detect new updates
 
-## 🚀 How It Works
+AI-Powered Matching – Uses embeddings (via Jina AI or OpenAI) for semantic similarity
 
-1. **Data Collection**: Fetches new posts and user profiles from Firestore
-2. **AI Embedding**: Generates vector embeddings for posts and user interests
-3. **Semantic Matching**: Calculates similarity scores using cosine similarity
-4. **Smart Filtering**: Identifies matches above the threshold
-5. **Email Delivery**: Sends personalized notifications to matched users
+Smart Filtering – Matches users or subscribers based on relevance thresholds
 
-## 📊 Demo
+Personalized Emails – Sends rich HTML emails tailored to each user’s profile
 
-### Workflow Overview
+Batch Processing – Efficiently handles multiple users and updates
 
-![Workflow Diagram](images/workflow-diagram.png)
+Scalable Design – Easily integrates with any website or platform backend
 
-*Add your n8n workflow screenshot here*
+🚀 How It Works
 
-### Email Preview
+Data Collection – Fetches new content and user profiles from a connected database
 
-![Email Preview](images/email-preview.png)
+AI Embedding – Generates vector representations for both content and user interests
 
-*Add your email notification preview here*
+Semantic Matching – Calculates similarity scores to find relevant users
 
-### Matching Dashboard
+Filtering & Scoring – Selects users above a defined similarity threshold
 
-![Matching Dashboard](images/dashboard.png)
+Email Delivery – Sends personalized notifications with formatted HTML content
 
-*Add your matching dashboard or analytics view here*
+📊 Demo
+Workflow Overview
 
-## 🛠️ Technology Stack
+<img width="1828" height="763" alt="image" src="https://github.com/user-attachments/assets/30798471-be45-451a-adba-acc3a000e299" />
 
-- **n8n**: Workflow automation platform
-- **Jina AI**: Embedding model for semantic understanding
-- **Google Firestore**: Database for posts and user data
-- **Gmail API**: Email delivery service
-- **JavaScript/Code Nodes**: Custom logic and processing
+Insert your n8n workflow screenshot here
 
-## 📝 Workflow File
+Email Preview
 
-Import the `ai auto.json` file into your n8n instance to get started with this automation.
+<img width="288" height="410" alt="image" src="https://github.com/user-attachments/assets/3cd2a49f-f886-4233-ae98-bc47c690233c" />
+<img width="262" height="281" alt="image" src="https://github.com/user-attachments/assets/573a4dc2-8493-4f32-a3d4-032bad9d8e6c" />
 
-## 🔧 Setup
 
-1. Import the workflow JSON file into n8n
-2. Configure your Firestore credentials
-3. Set up Gmail OAuth2 authentication
-4. Configure Jina AI API key
-5. Activate the workflow
+Insert your email notification preview here
 
-## 📧 Email Features
 
-- Professional HTML formatting
-- Personalized greeting with user's first name
-- Opportunity details with clear formatting
-- Match score display
-- Clear call-to-action steps
+🛠️ Technology Stack
 
-## 📈 Future Enhancements
+n8n – Workflow automation and orchestration
 
-- Customizable matching thresholds
-- User preference settings
-- Analytics dashboard
-- Multi-language support
-- Advanced filtering options
+Jina AI / OpenAI – Embedding models for semantic similarity
 
----
+Database (Any) – Firestore, MySQL, PostgreSQL, MongoDB, or API-based source
 
-**Built with ❤️ using n8n automation**
+Email Service – Gmail API, SMTP, or any email integration
 
+JavaScript / Code Nodes – For custom logic and filtering
+
+📝 Workflow File
+
+Import the provided ai_auto.json (or equivalent) into your n8n instance to get started.
+
+🔧 Setup
+
+Import the workflow JSON into n8n
+
+Configure your database credentials (any supported source)
+
+Set up your email provider credentials (e.g., Gmail, SMTP, or others)
+
+Add your AI embedding API key (Jina or OpenAI)
+
+Activate the workflow and set your preferred schedule
+
+📧 Email Features
+
+Clean, professional HTML formatting
+
+Personalized greeting (name, interests, etc.)
+
+Dynamic content section with relevant updates
+
+Similarity or match score (optional)
+
+Clear call-to-action links
+
+📈 Future Enhancements
+
+Customizable similarity thresholds
+
+User-specific notification settings
+
+Real-time analytics dashboard
+
+Multi-language support
+
+Extended API integrations (Notion, Slack, Discord, etc.)
+
+Built with ❤️ using n8n — the universal workflow automation platform.
